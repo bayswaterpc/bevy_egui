@@ -6,6 +6,8 @@ use bevy::{
     window::{CreateWindow, WindowDescriptor, WindowId},
     sprite::collide_aabb::{collide, Collision},
 };
+use bevy::ecs::schedule::ShouldRun;
+use bevy::app::AppExit;
 
 // NOTE: this "state based" approach to multiple windows is a short term workaround.
 // Future Bevy releases shouldn't require such a strict order of operations.
@@ -16,7 +18,7 @@ enum AppState {
 }
 
 
-/// An implementation of the classic game "Breakout"
+/// An implementation of the classic game "Breakout" with egui panels
 const TIME_STEP: f32 = 1.0 / 60.0;
 fn main() {
     App::build()
@@ -26,18 +28,31 @@ fn main() {
         .insert_resource(ClearColor(Color::rgb(0.9, 0.9, 0.9)))
         .add_state(AppState::CentralPanelState)
         .add_startup_system(setup.system())
-        .add_system_set(
-            SystemSet::on_update(AppState::GameState)
-                .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
+        .add_system_set( //follows timestep & state requirements
+            SystemSet::new()
+                .with_run_criteria(
+                    FixedTimestep::step(TIME_STEP as f64).chain(
+                        (|In(input): In<ShouldRun>, state: Res<State<AppState>>| {
+                            if state.current() == &AppState::GameState {
+                                input
+                            } else {
+                                ShouldRun::No
+                            }
+                        })
+                            .system(),
+                    ),
+                )
+                // Wait for game to load
                 .with_system(paddle_movement_system.system())
                 .with_system(ball_collision_system.system())
                 .with_system(ball_movement_system.system()),
+
         )
         .add_system_set(
             SystemSet::on_update(AppState::GameState)
                 .with_system(scoreboard_system.system())
         )
-        .add_system(egui_left_panel.system())
+        .add_system(ui_egui.system())
         .run();
 }
 
@@ -227,18 +242,25 @@ fn paddle_movement_system(
 fn ball_movement_system(mut app_state: ResMut<State<AppState>>, mut ball_query: Query<(&Ball, &mut Transform)>) {
     match app_state.current().clone() {
         AppState::GameState => {},
-        _ => return,
+        _ => {
+            println!("Used to Always Hit");
+            return;
+        },
     }
     if let Ok((ball, mut transform)) = ball_query.single_mut() {
         transform.translation += ball.velocity * TIME_STEP;
-        println!("ball moving")
     }
 }
 
 fn scoreboard_system(mut app_state: ResMut<State<AppState>>, scoreboard: Res<Scoreboard>, mut query: Query<&mut Text>) {
     match app_state.current().clone() {
-        AppState::GameState => {},
-        _ => return,
+        AppState::GameState => {
+            println!("Hits Correctly");
+        },
+        _ => {
+            println!("Never hits");
+            return;
+        },
     }
     let mut text = query.single_mut().unwrap();
     text.sections[0].value = format!("Score: {}", scoreboard.score);
@@ -308,7 +330,7 @@ fn ball_collision_system(
 }
 
 
-fn egui_left_panel(
+fn ui_egui(
     mut app_state: ResMut<State<AppState>>,
     egui_context: Res<EguiContext>,
 ) {
