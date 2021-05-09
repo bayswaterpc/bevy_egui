@@ -52,3 +52,8 @@ path = "examples/two_windows.rs"
 name = "ui"
 path = "examples/ui.rs"
 
+[[example]]
+name = "bevy_central_panel"
+path = "examples/bevy_central_panel.rs"
+
+
